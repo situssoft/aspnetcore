@@ -88,11 +88,28 @@ namespace Microsoft.AspNetCore.Http
 
                 if (TryGetDateTimeTryParseMethod(type, out methodInfo))
                 {
+                    Expression dateTimeStyles = type == typeof(DateTime) || type == typeof(DateTimeOffset) ?
+                        Expression.Convert(
+                            Expression.Or(
+                                // We conver the `DateTimeStyles` value to the underlying integer time
+                                // in order to successfully process the bitwise OR operation. Then, we
+                                // convert that to the original `DateTimeStyles` type.
+                                //
+                                // We generate `DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeLocal ` to
+                                // support parsing types into the UTC timezone by default.
+                                Expression.Convert(Expression.Constant(DateTimeStyles.AdjustToUniversal), Enum.GetUnderlyingType(typeof(DateTimeStyles))),
+                                Expression.Convert(Expression.Constant(DateTimeStyles.AssumeLocal), Enum.GetUnderlyingType(typeof(DateTimeStyles)))),
+                            typeof(DateTimeStyles)) :
+                        // DateOnly and TimeOnly types do not support any DateTimeStyles per
+                        // https://docs.microsoft.com/en-us/dotnet/api/system.globalization.datetimestyles?view=net-6.0#remarks
+                        // so we default to `DateTimeStyles.None` for those scenarios.
+                        Expression.Constant(DateTimeStyles.None);
+
                     return (expression) => Expression.Call(
                         methodInfo!,
                         TempSourceStringExpr,
                         Expression.Constant(CultureInfo.InvariantCulture),
-                        Expression.Constant(DateTimeStyles.None),
+                        dateTimeStyles,
                         expression);
                 }
 
